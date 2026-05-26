@@ -6,6 +6,32 @@ from collections import deque
 rng = RandomNumberGenerator(12435535)
 MAX_TABU = 20
 
+def stats(arr):
+    return {
+        "MIN": min(arr),
+        "MAX": max(arr),
+        "AVG": round(sum(arr) / len(arr), 2)
+    }
+
+def print_table(title, rs_results, vd_results, ts_results):
+
+    rs = stats(rs_results)
+    vd = stats(vd_results)
+    ts = stats(ts_results)
+
+    print("\n" + "=" * 60)
+    print(title)
+    print("=" * 60)
+
+    print(f"{'Algorithm':<20} {'MIN':>10} {'MAX':>10} {'AVG':>10}")
+    print("-" * 60)
+
+    print(f"{'Random Solution':<20} {rs['MIN']:>10} {rs['MAX']:>10} {rs['AVG']:>10}")
+    print(f"{'VD':<20} {vd['MIN']:>10} {vd['MAX']:>10} {vd['AVG']:>10}")
+    print(f"{'Tabu Search':<20} {ts['MIN']:>10} {ts['MAX']:>10} {ts['AVG']:>10}")
+
+    print("=" * 60)
+
 def generate_data_2_7(n):
 
     p = []  # processing times
@@ -14,7 +40,7 @@ def generate_data_2_7(n):
 
     S = 0
 
-    for i in range(n):
+    for _ in range(n):
         w.append(rng.nextInt(1, 10))
         proc = rng.nextInt(1,100)
 
@@ -22,9 +48,9 @@ def generate_data_2_7(n):
 
         S += proc
 
-    for i in range(n):
-
+    for _ in range(n):
         d.append(rng.nextInt(math.floor(S/4), math.floor(S/2)))
+
     return p, d, w
 
 def randomChoice(arr):
@@ -71,13 +97,22 @@ def evaluate_partial(v, p, d, w, start=0, completion_time=None, T = None):
 
     return T[-1], completion_time, T
 
-def find_neighbours(v):
+def find_neighbours(v, nb_type: str = "n2"):
     neigh = []
     ii = []
     jj = []
     n = len(v)
-    for i in range(n):
-        for j in range(i+1, n):
+    if nb_type == "n2":
+        for i in range(n):
+            for j in range(i+1, n):
+                lv = v.copy()
+                lv[i], lv[j] = lv[j], lv[i]
+                neigh.append(lv)
+                ii.append(i)
+                jj.append(j)
+    elif nb_type == "n":
+        for i in range(n):
+            j = (i+1)%n
             lv = v.copy()
             lv[i], lv[j] = lv[j], lv[i]
             neigh.append(lv)
@@ -85,7 +120,7 @@ def find_neighbours(v):
             jj.append(j)
     return neigh, ii, jj
 
-def VD(p, d, w, itr = 1000, v = None, ev = 0):
+def VD(p, d, w, itr = 1000, v = None, ev = 0, nb_type: str = "n2"):
     if v == None:
         v = random_solution(len(p))
         ev, _, _ = evaluate_partial(v, p, d, w)
@@ -94,7 +129,7 @@ def VD(p, d, w, itr = 1000, v = None, ev = 0):
     best_ev = ev
 
     for _ in range(itr):
-        nvs, _, _ = find_neighbours(v)
+        nvs, _, _ = find_neighbours(v, nb_type)
         local_v = []
         local_ev = math.inf
         for nv in nvs:
@@ -112,7 +147,8 @@ def VD(p, d, w, itr = 1000, v = None, ev = 0):
 
     return best_v, best_ev
 
-def inlineTS(p, d, w, itr = 1000, v = None, ev = 0):
+def inlineTS(p, d, w, itr = 1000, v = None, ev = 0, nb_type: str = "n2", tabu_type: str = None):
+    return TS(p, d, w, itr, v, ev, nb_type, tabu_type)
     if v == None:
         v = random_solution(len(p))
         ev, _, _ = evaluate_partial(v, p, d, w)
@@ -161,57 +197,138 @@ def inlineTS(p, d, w, itr = 1000, v = None, ev = 0):
 
     return best_v, best_ev, len(tabu_set)
 
+def TS(p, d, w, itr = 1000, v = None, ev = 0,  nb_type: str = "n2", tabu_type = None):
+    if v == None:
+        v = random_solution(len(p))
+        ev, _, _ = evaluate_partial(v, p, d, w)
+
+    if tabu_type == None:
+        tabu_type = "numbers" if nb_type == "n" else "indexes"
+
+    best_v = v
+    best_ev = ev
+    tabu_dq = deque()
+    tabu_set = set()
+    pct = None
+    T = None
+
+    for _ in range(itr):
+        local_v = None
+        local_ev = math.inf
+        best_move = None
+        nbs, ii, jj = find_neighbours(v, nb_type)
+        for nb, i, j in zip(nbs, ii, jj):
+            ev, _, _ = evaluate_partial(nb, p, d, w)
+            if tabu_type == "indexes":
+                move = (i, j)
+            else:
+                move = (nb[i], nb[j])
+            if ev < local_ev and move not in tabu_set:
+                local_v = nb
+                local_ev = ev
+                best_move = move
+
+        tabu_set.add(best_move)
+        tabu_dq.append(best_move)
+        if len(tabu_dq) > MAX_TABU:
+            old = tabu_dq.popleft()
+            tabu_set.remove(old)
+
+        if local_v is None:
+            print("BREAK!!!!")
+            break
+        
+        v = local_v
+        _, pct, T = evaluate_partial(v, p, d, w, best_move[0], pct, T)
+
+        if local_ev < best_ev:
+            best_v = local_v
+            best_ev = local_ev
+
+
+    return best_v, best_ev, len(tabu_set)
+
 # Main
-n = 20
-p, d, w = generate_data_2_7(n)
+def single_exp():
+    n = 20
+    p, d, w = generate_data_2_7(n)
 
-print("p=",p)
-print("d=",d)
-print("w=",w)
+    print("p=",p)
+    print("d=",d)
+    print("w=",w)
 
-print("losowe rozwiązanie")
-rv = random_solution(n)
-erv, _, _ = evaluate_partial(rv, p, d, w)
-print("rv=",rv)
-print("erv=",erv)
-
-print("-- VD --")
-start = time.time()
-vdv, evdv = VD(p, d, w, 1000, rv, erv)
-end = time.time()
-print("vdv=",vdv)
-print("evdv=",evdv)
-print("time= ",round(end-start,3))
-
-
-
-print("-- inline TS --")
-start = time.time()
-tsv, etsv, le = inlineTS(p, d, w, 1000, rv, erv)
-end = time.time()
-print("tsv=",tsv)
-print("etsv=",etsv)
-print("tabu len=",le)
-print("time= ",round(end-start,3))
-
-###########################3
-
-vd_results = []
-ts_results = []
-its_results = []
-
-for i in range(30):
-
-    print(f" --- loop {i+1}/30 --- ")
-
+    print("losowe rozwiązanie")
     rv = random_solution(n)
     erv, _, _ = evaluate_partial(rv, p, d, w)
+    print("rv=",rv)
+    print("erv=",erv)
 
-    _, ev1 = VD(p, d, w, 1000, rv, erv)
-    _, ev3, _ = inlineTS(p, d, w, 1000, rv, erv)
+    print("-- VD --")
+    start = time.time()
+    vdv, evdv = VD(p, d, w, 1000, rv, erv)
+    end = time.time()
+    print("vdv=",vdv)
+    print("evdv=",evdv)
+    print("time= ",round(end-start,3))
 
-    vd_results.append(ev1)
-    its_results.append(ev3)
 
-print(sum(vd_results)/30)
-print(sum(its_results)/30)
+
+    print("-- inline TS --")
+    start = time.time()
+    tsv, etsv, le = inlineTS(p, d, w, 1000, rv, erv)
+    end = time.time()
+    print("tsv=",tsv)
+    print("etsv=",etsv)
+    print("tabu len=",le)
+    print("time= ",round(end-start,3))
+
+###########################
+def avg_exp():
+    n = 25
+    p, d, w = generate_data_2_7(n)
+
+    print_list = []
+
+    #for nb_type, tabu_type in zip(["n2", "n2", "n"], ["indexes", "numbers", "numbers"]):
+    for nb_type in ["n2", "n"]:
+        for tabu_type in ["indexes", "numbers"]:
+            if n < MAX_TABU + 5 and nb_type == "n" and tabu_type == "indexes":
+                continue
+            vd_results = []
+            rs_results = []
+            its_results = []
+            repeats = 10
+
+            print(p)
+            print(d)
+            print(w)
+
+            for i in range(repeats):
+
+                print(f" --- loop {i+1}/{repeats} --- ")
+
+                rv = random_solution(n)
+                erv, _, _ = evaluate_partial(rv, p, d, w)
+
+                _, ev1 = VD(p, d, w, 1000, rv, erv, nb_type = nb_type)
+                _, ev3, _ = inlineTS(p, d, w, 1000, rv, erv, nb_type = nb_type, tabu_type = tabu_type)
+
+                #print(erv, ev1, ev3)
+
+                rs_results.append(erv)
+                vd_results.append(ev1)
+                its_results.append(ev3)
+
+            print_list.append([
+                f"Nbs type: {nb_type} | Tabu type: {tabu_type}",
+                rs_results,
+                vd_results,
+                its_results
+            ])
+
+    for pl in print_list:
+        print_table(pl[0], pl[1], pl[2], pl[3])
+
+if __name__ == "__main__":
+    #single_exp()
+    avg_exp()
