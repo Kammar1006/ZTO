@@ -4,9 +4,10 @@ import time
 from collections import deque
 
 rng = RandomNumberGenerator(12435535)
-MAX_TABU = 20
+#MAX_TABU = 20
 
 def stats(arr):
+    #print(arr)
     return {
         "MIN": min(arr),
         "MAX": max(arr),
@@ -27,7 +28,7 @@ def print_table(title, rs_results, vd_results, ts_results):
     print("-" * 60)
 
     print(f"{'Random Solution':<20} {rs['MIN']:>10} {rs['MAX']:>10} {rs['AVG']:>10}")
-    print(f"{'VD':<20} {vd['MIN']:>10} {vd['MAX']:>10} {vd['AVG']:>10}")
+    print(f"{'DS':<20} {vd['MIN']:>10} {vd['MAX']:>10} {vd['AVG']:>10}")
     print(f"{'Tabu Search':<20} {ts['MIN']:>10} {ts['MAX']:>10} {ts['AVG']:>10}")
 
     print("=" * 60)
@@ -120,7 +121,7 @@ def find_neighbours(v, nb_type: str = "n2"):
             jj.append(j)
     return neigh, ii, jj
 
-def VD(p, d, w, itr = 1000, v = None, ev = 0, nb_type: str = "n2"):
+def DS(p, d, w, itr = 1000, v = None, ev = 0, nb_type: str = "n2"):
     if v == None:
         v = random_solution(len(p))
         ev, _, _ = evaluate_partial(v, p, d, w)
@@ -147,8 +148,8 @@ def VD(p, d, w, itr = 1000, v = None, ev = 0, nb_type: str = "n2"):
 
     return best_v, best_ev
 
-def inlineTS(p, d, w, itr = 1000, v = None, ev = 0, nb_type: str = "n2", tabu_type: str = None):
-    return TS(p, d, w, itr, v, ev, nb_type, tabu_type)
+def inlineTS(p, d, w, itr = 1000, v = None, ev = 0, nb_type: str = "n2", tabu_type: str = None, max_tabu = 20):
+    return TS(p, d, w, itr, v, ev, nb_type, tabu_type, max_tabu)
     if v == None:
         v = random_solution(len(p))
         ev, _, _ = evaluate_partial(v, p, d, w)
@@ -197,7 +198,7 @@ def inlineTS(p, d, w, itr = 1000, v = None, ev = 0, nb_type: str = "n2", tabu_ty
 
     return best_v, best_ev, len(tabu_set)
 
-def TS(p, d, w, itr = 1000, v = None, ev = 0,  nb_type: str = "n2", tabu_type = None):
+def TS(p, d, w, itr = 1000, v = None, ev = 0,  nb_type: str = "n2", tabu_type = None, max_tabu = 20):
     if v == None:
         v = random_solution(len(p))
         ev, _, _ = evaluate_partial(v, p, d, w)
@@ -230,12 +231,12 @@ def TS(p, d, w, itr = 1000, v = None, ev = 0,  nb_type: str = "n2", tabu_type = 
 
         tabu_set.add(best_move)
         tabu_dq.append(best_move)
-        if len(tabu_dq) > MAX_TABU:
+        if len(tabu_dq) > max_tabu:
             old = tabu_dq.popleft()
             tabu_set.remove(old)
 
         if local_v is None:
-            print("BREAK!!!!")
+            print("BREAK")
             break
         
         v = local_v
@@ -263,9 +264,9 @@ def single_exp():
     print("rv=",rv)
     print("erv=",erv)
 
-    print("-- VD --")
+    print("-- DS --")
     start = time.time()
-    vdv, evdv = VD(p, d, w, 1000, rv, erv)
+    vdv, evdv = DS(p, d, w, 1000, rv, erv)
     end = time.time()
     print("vdv=",vdv)
     print("evdv=",evdv)
@@ -286,18 +287,26 @@ def single_exp():
 def avg_exp():
     n = 25
     p, d, w = generate_data_2_7(n)
+    max_tabu = 20
 
     print_list = []
+    repeats = 10
+    rs_results = []
+    ers_results = []
+
+    for _ in range(repeats):
+        rv = random_solution(n)
+        erv, _, _ = evaluate_partial(rv, p, d, w)
+        rs_results.append(rv)
+        ers_results.append(erv)
 
     #for nb_type, tabu_type in zip(["n2", "n2", "n"], ["indexes", "numbers", "numbers"]):
     for nb_type in ["n2", "n"]:
         for tabu_type in ["indexes", "numbers"]:
-            if n < MAX_TABU + 5 and nb_type == "n" and tabu_type == "indexes":
+            if n < max_tabu + 5 and nb_type == "n" and tabu_type == "indexes":
                 continue
             vd_results = []
-            rs_results = []
             its_results = []
-            repeats = 10
 
             print(p)
             print(d)
@@ -306,14 +315,15 @@ def avg_exp():
             for i in range(repeats):
 
                 print(f" --- loop {i+1}/{repeats} --- ")
+                print(f"Nbs type: {nb_type} | Tabu type: {tabu_type}")
 
-                rv = random_solution(n)
-                erv, _, _ = evaluate_partial(rv, p, d, w)
+                rv = rs_results[i]
+                erv = ers_results[i]
 
-                _, ev1 = VD(p, d, w, 1000, rv, erv, nb_type = nb_type)
+                _, ev1 = DS(p, d, w, 1000, rv, erv, nb_type = nb_type)
                 _, ev3, _ = inlineTS(p, d, w, 1000, rv, erv, nb_type = nb_type, tabu_type = tabu_type)
 
-                #print(erv, ev1, ev3)
+                print(erv, ev1, ev3)
 
                 rs_results.append(erv)
                 vd_results.append(ev1)
@@ -321,7 +331,7 @@ def avg_exp():
 
             print_list.append([
                 f"Nbs type: {nb_type} | Tabu type: {tabu_type}",
-                rs_results,
+                ers_results,
                 vd_results,
                 its_results
             ])
@@ -329,6 +339,109 @@ def avg_exp():
     for pl in print_list:
         print_table(pl[0], pl[1], pl[2], pl[3])
 
+def iter_exp():
+    n = 25
+    p, d, w = generate_data_2_7(n)
+    print_list = []
+
+    repeats = 10
+    rs_results = []
+    ers_results = []
+
+    for _ in range(repeats):
+        rv = random_solution(n)
+        erv, _, _ = evaluate_partial(rv, p, d, w)
+        rs_results.append(rv)
+        ers_results.append(erv)
+
+    # for nb_type, tabu_type in zip(["n2", "n2", "n"], ["indexes", "numbers", "numbers"]):
+    for iter in [5, 20, 100, 300, 1000]:
+        vd_results = []
+        its_results = []
+
+
+        print(p)
+        print(d)
+        print(w)
+
+        for i in range(repeats):
+            print(f" --- loop {i + 1}/{repeats} --- ")
+            print(f"Iter: {iter}")
+
+            rv = rs_results[i]
+            erv = ers_results[i]
+
+            _, ev1 = DS(p, d, w, iter, rv, erv)
+            _, ev3, _ = inlineTS(p, d, w, iter, rv, erv)
+
+            print(erv, ev1, ev3)
+
+            vd_results.append(ev1)
+            its_results.append(ev3)
+
+        print_list.append([
+            f"Iter {iter}",
+            ers_results,
+            vd_results,
+            its_results
+        ])
+
+    for pl in print_list:
+        print_table(pl[0], pl[1], pl[2], pl[3])
+
+def tabu_exp():
+    n = 25
+    p, d, w = generate_data_2_7(n)
+    print_list = []
+
+    repeats = 10
+    rs_results = []
+    ers_results = []
+
+    for _ in range(repeats):
+        rv = random_solution(n)
+        erv, _, _ = evaluate_partial(rv, p, d, w)
+        rs_results.append(rv)
+        ers_results.append(erv)
+
+    # for nb_type, tabu_type in zip(["n2", "n2", "n"], ["indexes", "numbers", "numbers"]):
+    for max_tabu in [5, 10, 20, 30]:
+        vd_results = []
+        its_results = []
+
+
+        print(p)
+        print(d)
+        print(w)
+
+        for i in range(repeats):
+            print(f" --- loop {i + 1}/{repeats} --- ")
+            print(f"Max Tabu: {max_tabu}")
+
+            rv = rs_results[i]
+            erv = ers_results[i]
+
+            _, ev1 = DS(p, d, w, 1000, rv, erv)
+            _, ev3, _ = inlineTS(p, d, w, 1000, rv, erv, "n2", "indexes", max_tabu)
+
+            print(erv, ev1, ev3)
+
+            vd_results.append(ev1)
+            its_results.append(ev3)
+
+        print_list.append([
+            f"Max tabu: {max_tabu}",
+            ers_results,
+            vd_results,
+            its_results
+        ])
+
+    for pl in print_list:
+        print_table(pl[0], pl[1], pl[2], pl[3])
+
+
 if __name__ == "__main__":
     #single_exp()
     avg_exp()
+    #iter_exp()
+    #tabu_exp()
